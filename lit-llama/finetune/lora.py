@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 import os
 import time
+import wandb
+import configparser
 
 import lightning as L
 import numpy as np
@@ -22,7 +24,6 @@ from lit_llama.lora import mark_only_lora_as_trainable, lora, lora_state_dict
 from lit_llama.model import LLaMA, LLaMAConfig
 from lit_llama.tokenizer import Tokenizer
 from scripts.prepare_alpaca import generate_prompt
-
 
 eval_interval = 100
 save_interval = 100
@@ -50,6 +51,23 @@ def main(
     tokenizer_path: str = "checkpoints/lit-llama/tokenizer.model",
     out_dir: str = f"litllamadata/finetuned_models/{param_space_size}/",
 ):
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    api_key = config.get('API', 'key')
+    wandb.login(key=api_key)
+
+    wandb.init(
+
+        project="lit-llama-finetune",
+
+        name=f"experiment_{param_space_size}",
+
+        config={
+            "learning_rate": learning_rate,
+            "architecture": f"lit-llama{param_space_size}",
+            "dataset": "custom-movielens",
+            "max iterations": max_iters,
+        })
 
     fabric = L.Fabric(accelerator="cuda", devices=8, precision="bf16-true")
     fabric.launch()
@@ -76,7 +94,7 @@ def main(
     model, optimizer = fabric.setup(model, optimizer)
     print("Starting training...")
     train(fabric, model, optimizer, train_data, val_data, tokenizer_path, out_dir)
-
+    wandb.finish()
     # Save the final LoRA checkpoint at the end of training
     print(f"Saving final LoRA weights to {out_dir}")
     checkpoint = lora_state_dict(model)
@@ -121,6 +139,7 @@ def train(
             if step_count % eval_interval == 0:
                 val_loss = validate(fabric, model, val_data, tokenizer_path)
                 fabric.print(f"step {iter_num}: val loss {val_loss:.4f}")
+                wandb.log({"validation loss": val_loss, "iteration": iter_num})
                 fabric.barrier()
 
             if step_count % save_interval == 0:
@@ -134,6 +153,7 @@ def train(
         if iter_num % log_interval == 0:
             fabric.print(f"iter {iter_num}: loss {loss.item():.4f}, time: {dt*1000:.2f}ms")
             print(f"iter {iter_num}/{max_iters}: loss {loss.item():.4f}, time: {dt * 1000:.2f}ms")
+            wandb.log({"loss": loss.item(), "iteration": iter_num})
 
 
 def generate_response(model, instruction, input, tokenizer_path):
