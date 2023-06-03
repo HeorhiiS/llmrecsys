@@ -66,7 +66,7 @@ def main(
     # strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block)
     # For slurm based cluster must use ddp
 
-    fabric = L.Fabric(accelerator="gpu", devices=6, num_nodes=2, precision="float16", strategy="ddp")
+    fabric = L.Fabric(accelerator="gpu", devices=6, num_nodes=2, precision="f16", strategy="ddp")
     fabric.seed_everything(1337 + fabric.global_rank)
     fabric.launch()
 
