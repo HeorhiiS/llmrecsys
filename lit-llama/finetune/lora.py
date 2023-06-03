@@ -61,13 +61,12 @@ def main(
     config.read('config.ini')
     api_key = config.get('API', 'key')
     # wandb.login(key=api_key)
+    # auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls={Block})
+    #
+    # strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block)
+    # For slurm based cluster must use ddp
 
-    auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls={Block})
-
-    strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block, require_grad=True)
-
-
-    fabric = L.Fabric(accelerator="cuda", devices=2, precision="bf16-mixed", strategy=strategy)
+    fabric = L.Fabric(accelerator="gpu", devices=6, num_nodes=2, precision="float16", strategy="ddp")
     fabric.seed_everything(1337 + fabric.global_rank)
     fabric.launch()
 

@@ -1,13 +1,13 @@
 #!/bin/bash
 # Set number of tasks to run
-##SBATCH -n 4
-#SBATCH -c 40
-#SBATCH --nodes=1
+##SBATCH -c 80
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=4
 #SBATCH -p nvidia
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:6
 ##SBATCH -C a100
 ##SBATCH --gpus=2
-#SBATCH --mem=380G
+#SBATCH --mem=480G
 ##SBATCH -w cn001,cn002
 # Walltime format hh:mm:ss
 #SBATCH --time=24:30:00
