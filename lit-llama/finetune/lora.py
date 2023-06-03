@@ -21,9 +21,14 @@ sys.path.append(str(wd))
 
 from generate import generate
 from lit_llama.lora import mark_only_lora_as_trainable, lora, lora_state_dict
-from lit_llama.model import LLaMA, LLaMAConfig
+from lit_llama.model import LLaMA, LLaMAConfig, Block
 from lit_llama.tokenizer import Tokenizer
 from scripts.prepare_alpaca import generate_prompt
+
+# Extra optimization functions
+from functools import partial
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+from lightning.fabric.strategies import FSDPStrategy
 
 eval_interval = 100
 save_interval = 100
@@ -54,11 +59,11 @@ def main(
     config = configparser.ConfigParser()
     config.read('config.ini')
     api_key = config.get('API', 'key')
-    wandb.login(key=api_key)
+    # wandb.login(key=api_key)
 
     wandb.init(
 
-        project="lit-llama-finetune",
+        project="llmrecsys",
 
         name=f"experiment_{param_space_size}",
 
@@ -69,9 +74,15 @@ def main(
             "max iterations": max_iters,
         })
 
-    fabric = L.Fabric(accelerator="cuda", devices=8, precision="bf16-true")
-    fabric.launch()
+    auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls={Block})
+
+    strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block)
+
+    fabric = L.Fabric(accelerator="cuda", devices=2, precision="bf16-mixed", strategy=strategy)
     fabric.seed_everything(1337 + fabric.global_rank)
+    fabric.launch()
+
+
 
     if fabric.global_rank == 0:
         os.makedirs(out_dir, exist_ok=True)

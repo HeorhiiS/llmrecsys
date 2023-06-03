@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 
 DATA_FILE = "https://raw.githubusercontent.com/tloen/alpaca-lora/main/alpaca_data_cleaned_archive.json"
-DATA_FILE_NAME = "llama_train.json"
+DATA_FILE_NAME = "llama_train_red.json"
 IGNORE_INDEX = -1
 
 
@@ -60,11 +60,11 @@ def prepare(
 
     print("Processing train split ...")
     train_set = [prepare_sample(sample, tokenizer, max_seq_length, mask_inputs) for sample in tqdm(train_set)]
-    torch.save(train_set, file_path.parent / "train.pt")
+    torch.save(train_set, file_path.parent / "train_red.pt")
 
     print("Processing test split ...")
     test_set = [prepare_sample(sample, tokenizer, max_seq_length, mask_inputs) for sample in tqdm(test_set)]
-    torch.save(test_set, file_path.parent / "test.pt")
+    torch.save(test_set, file_path.parent / "test_red.pt")
 
 
 def download(file_path: Path):
