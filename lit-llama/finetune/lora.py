@@ -24,11 +24,12 @@ from lit_llama.lora import mark_only_lora_as_trainable, lora, lora_state_dict
 from lit_llama.model import LLaMA, LLaMAConfig, Block
 from lit_llama.tokenizer import Tokenizer
 from scripts.prepare_alpaca import generate_prompt
+from jsonargparse.cli import CLI
 
 # Extra optimization functions
 from functools import partial
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-from lightning.fabric.strategies import FSDPStrategy
+from lightning.fabric.strategies import FSDPStrategy, DeepSpeedStrategy
 
 eval_interval = 100
 save_interval = 100
@@ -61,22 +62,10 @@ def main(
     api_key = config.get('API', 'key')
     # wandb.login(key=api_key)
 
-    wandb.init(
-
-        project="llmrecsys",
-
-        name=f"experiment_{param_space_size}",
-
-        config={
-            "learning_rate": learning_rate,
-            "architecture": f"lit-llama{param_space_size}",
-            "dataset": "custom-movielens",
-            "max iterations": max_iters,
-        })
-
     auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls={Block})
 
-    strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block)
+    strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block, require_grad=True)
+
 
     fabric = L.Fabric(accelerator="cuda", devices=2, precision="bf16-mixed", strategy=strategy)
     fabric.seed_everything(1337 + fabric.global_rank)
@@ -86,6 +75,18 @@ def main(
 
     if fabric.global_rank == 0:
         os.makedirs(out_dir, exist_ok=True)
+        wandb.init(
+
+            project="llmrecsys",
+
+            name=f"experiment_{param_space_size}",
+
+            config={
+                "learning_rate": learning_rate,
+                "architecture": f"lit-llama{param_space_size}",
+                "dataset": "custom-movielens",
+                "max iterations": max_iters,
+            })
 
     train_data, val_data = load_datasets(data_dir=data_dir)
 
@@ -243,7 +244,5 @@ if __name__ == "__main__":
     # Uncomment this line if you see an error: "Expected is_sm80 to be true, but got false"
     # torch.backends.cuda.enable_flash_sdp(False)
     torch.set_float32_matmul_precision("high")
-    
-    from jsonargparse.cli import CLI
 
     CLI(main)
