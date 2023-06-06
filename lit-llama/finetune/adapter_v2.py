@@ -35,51 +35,79 @@ from lit_llama.adapter_v2 import (
     )
 from lit_llama.tokenizer import Tokenizer
 from scripts.prepare_alpaca import generate_prompt
-from lightning.fabric.strategies import DeepSpeedStrategy
+from lightning.fabric.strategies import DeepSpeedStrategy, DDPStrategy, FSDPStrategy
+import wandb
+from jsonargparse.cli import CLI
 
 
 eval_interval = 600
 save_interval = 1000
 eval_iters = 100
 log_interval = 1
-devices = 1
+devices = 8
 
 # Hyperparameters
 learning_rate = 9e-3
-batch_size = 64 / devices
-micro_batch_size = 4
+batch_size = 32 / devices
+micro_batch_size = 1
 gradient_accumulation_steps = batch_size // micro_batch_size
-epoch_size = 50000  # train dataset size
+epoch_size = 20000  # train dataset size
 num_epochs = 5
 max_iters = num_epochs * epoch_size // devices
 weight_decay = 0.02
 max_seq_length = 256  # see scripts/prepare_alpaca.py
 warmup_steps = epoch_size * 2 // micro_batch_size // devices  # 2 epoch
+param_space_size ="7B"
 
 ds_config = {
     "train_micro_batch_size_per_gpu": micro_batch_size,
     "gradient_accumulation_steps": gradient_accumulation_steps,
-    "zero_optimization": {"stage": 2},
+    "zero_optimization": {"stage": 3},
+    "device_mapping": "-1"
+
 }
 
 
 def main(
-    data_dir: str = "data/alpaca", 
-    pretrained_path: str = "checkpoints/lit-llama/7B/lit-llama.pth",
-    out_dir: str = "out/adapter_v2/alpaca",
+    data_dir: str = "litllamadata/finetune_dataset/",
+    pretrained_path: str = f"checkpoints/lit-llama/{param_space_size}/lit-llama.pth",
+    out_dir: str = f"litllamadata/finetuned_models/{param_space_size}/",
 ):
 
+
+    strategy = DeepSpeedStrategy(
+        stage=3,
+        offload_optimizer=True,
+        offload_parameters=True,
+    )
+
+    print(torch.cuda.device_count())
     fabric = L.Fabric(
         accelerator="cuda",
-        devices=1,
-        strategy=(DeepSpeedStrategy(config=ds_config) if devices > 1 else "auto"),
-        precision="bf16-true",
+        devices=8,
+        # strategy=(DeepSpeedStrategy(config=ds_config) if devices > 1 else "auto"),
+        strategy="auto",
+        precision="16-mixed",
     )
+
+    print(f"Running on {fabric.global_rank} with {fabric.world_size} processes.")
     fabric.launch()
     fabric.seed_everything(1337 + fabric.global_rank)
 
     if fabric.global_rank == 0:
         os.makedirs(out_dir, exist_ok=True)
+        wandb.init(
+
+            project="llmrecsys",
+
+            name=f"experiment-adapterv2-{param_space_size}",
+
+            config={
+                "learning_rate": learning_rate,
+                "architecture": f"lit-llama{param_space_size}",
+                "dataset": "custom-movielens",
+                "max iterations": max_iters,
+            })
 
     train_data, val_data = load_datasets(data_dir=data_dir)
 
@@ -90,10 +118,13 @@ def main(
             f"Can't find the pretrained weights at {pretrained_path}."
             " Please follow the instructions in the README to download them."
         )
+
+    torch.set_grad_enabled(True)
     checkpoint = torch.load(pretrained_path)
 
-    with fabric.init_module():
+    with fabric.init_module(), fabric.sharded_model():
         model = LLaMA(config)
+        print("Loading pretrained weights...")
         # strict=False because missing keys due to adapter weights not contained in state dict
         model.load_state_dict(checkpoint, strict=False)
 
@@ -104,11 +135,16 @@ def main(
     print(f"Number of trainable parameters: {num_params}")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    model, optimizer = fabric.setup(model, optimizer)
+    for param in model.parameters():
+        param.requires_grad = True
+
+
+    model, optimizer = fabric.setup(model, optimizer, move_to_device=True)
     train(fabric, model, optimizer, train_data, val_data, out_dir)
+    wandb.finish()
 
     # Save the final checkpoint at the end of training
-    save_model_checkpoint(fabric, model, os.path.join(out_dir, "lit-llama-adapter-finetuned.pth"))
+    save_model_checkpoint(fabric, model, os.path.join(out_dir, f"lit-llama-adapter-finetuned{param_space_size}.pth"))
 
 
 def train(
@@ -149,16 +185,18 @@ def train(
             if step_count % eval_interval == 0:
                 val_loss = validate(fabric, model, val_data)
                 fabric.print(f"step {iter_num}: val loss {val_loss:.4f}")
+                wandb.log({"validation loss": val_loss, "iteration": iter_num})
                 fabric.barrier()
 
             if step_count % save_interval == 0:
                 print(f"Saving adapter weights to {out_dir}")
                 # TODO: Provide a function/script to merge the adapter weights with pretrained weights
-                save_model_checkpoint(fabric, model, os.path.join(out_dir, f"iter-{iter_num:06d}.pth"))
+                save_model_checkpoint(fabric, model, os.path.join(out_dir, f"iter-adp-{iter_num:06d}.pth"))
 
         dt = time.time() - t0
         if iter_num % log_interval == 0:
             fabric.print(f"iter {iter_num}: loss {loss.item():.4f}, time: {dt*1000:.2f}ms")
+            wandb.log({"loss": loss.item(), "iteration": iter_num})
 
 
 def generate_response(model, instruction, input=""):
@@ -259,7 +297,5 @@ if __name__ == "__main__":
     # Uncomment this line if you see an error: "Expected is_sm80 to be true, but got false"
     # torch.backends.cuda.enable_flash_sdp(False)
     torch.set_float32_matmul_precision("high")
-
-    from jsonargparse.cli import CLI
 
     CLI(main)

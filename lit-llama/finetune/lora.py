@@ -35,13 +35,15 @@ eval_interval = 100
 save_interval = 100
 eval_iters = 100
 log_interval = 1
-
+devices = 6
 # Hyperparameters
 learning_rate = 3e-4
 batch_size = 128
-micro_batch_size = 4
+micro_batch_size = 2
 gradient_accumulation_steps = batch_size // micro_batch_size
-max_iters = 50000 * 3 // micro_batch_size
+epoch_size = 20000  # train dataset size
+num_epochs = 5
+max_iters = num_epochs * epoch_size // devices
 weight_decay = 0.0
 max_seq_length = 256  # see scripts/prepare_alpaca.py
 lora_r = 8
@@ -61,12 +63,12 @@ def main(
     config.read('config.ini')
     api_key = config.get('API', 'key')
     # wandb.login(key=api_key)
-    # auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls={Block})
-    #
-    # strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block)
+    auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls={Block})
+
+    strategy = FSDPStrategy(auto_wrap_policy=auto_wrap_policy, activation_checkpointing=Block)
     # For slurm based cluster must use ddp
 
-    fabric = L.Fabric(accelerator="gpu", devices=6, num_nodes=2, precision="f16", strategy="ddp")
+    fabric = L.Fabric(accelerator="gpu", devices=devices, num_nodes=2, precision="16-mixed", strategy='fsdp')
     fabric.seed_everything(1337 + fabric.global_rank)
     fabric.launch()
 
@@ -78,7 +80,7 @@ def main(
 
             project="llmrecsys",
 
-            name=f"experiment_{param_space_size}",
+            name=f"experiment-lora-{param_space_size}",
 
             config={
                 "learning_rate": learning_rate,
@@ -158,7 +160,7 @@ def train(
                 # We are only saving the LoRA weights
                 # TODO: Provide a function/script to merge the LoRA weights with pretrained weights
                 checkpoint = lora_state_dict(model)
-                fabric.save(os.path.join(out_dir, f"iter-{iter_num:06d}-ckpt.pth"), checkpoint)
+                fabric.save(os.path.join(out_dir, f"iter-lora-{iter_num:06d}-ckpt.pth"), checkpoint)
 
         dt = time.time() - t0
         if iter_num % log_interval == 0:
