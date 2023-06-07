@@ -16,33 +16,34 @@ from peft import (
 from transformers import LlamaForCausalLM, LlamaTokenizer, Trainer
 from utils.prompter import Prompter
 
+
 def train(
-    base_model: str = "hfcheckpoints/7B/",  # the only required argument
-    train_data_path: str = "/litllama/finetune_dataset/llama_train_red.json",
-    val_data_path: str = "/litllama/finetune_dataset/llama_eval_red.json",
-    output_dir: str = "",
-    dataset_whole_path: str = "/litllama/finetune_dataset/llama_train_red_wh.json",
+    base_model: str = "../hfcheckpoints/13B/",  # the only required argument
+    train_data_path: str = "../litllamadata/finetune_dataset/llama_train_red.json",
+    val_data_path: str = "../litllamadata/finetune_dataset/llama_eval_red.json",
+    output_dir: str = "finetuned_models/13B/",
+    dataset_whole_path: str = None,
     train_on_inputs: bool = True,  # if False, masks out inputs in loss
     group_by_length: bool = False,
     use_wandb: bool = True,
     add_eos_token: bool = True,
 
 ):
-    devices = 8
+    devices = 4
     # training hyperparams
-    batch_size = 128 // devices
+    batch_size = 128
     micro_batch_size = 4
     num_epochs = 3
     learning_rate = 3e-4
     seq_len = 256
-    param_space_size = "7B"
+    param_space_size = "13B"
     val_set_size = 2000
     epoch_size =16000
     prompt_template_name = "alpaca"
     gradient_accumulation_steps = batch_size // micro_batch_size
 
     # LoRA hyperparams
-    lora_r = 8,
+    lora_r = 8
     lora_alpha = 16
     lora_dropout = 0.05
     lora_target_modules: List[str] = [
@@ -52,7 +53,7 @@ def train(
 
     # Load model and tokenizer
     device_map = "auto"  # because we want to use sharding via fsdp or deepspeed
-    prompter = Prompter(prompt_template_name)
+    prompter = Prompter()
 
     model = LlamaForCausalLM.from_pretrained(
         base_model,
@@ -182,20 +183,18 @@ def train(
             num_train_epochs=num_epochs,
             learning_rate=learning_rate,
             fp16=True,
-            logging_steps=100,
+            logging_steps=10,
             optim="adamw_torch",
             evaluation_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="steps",
-            eval_steps=1000 if val_set_size > 0 else None,
-            save_steps=1000,
+            eval_steps=100 if val_set_size > 0 else None,
+            save_steps=100,
             output_dir=output_dir,
             save_total_limit=5,
             load_best_model_at_end=True if val_set_size > 0 else False,
             # ddp_find_unused_parameters=False if ddp else None,
             group_by_length=group_by_length,
             report_to="wandb" if use_wandb else None,
-            fsdp=["full_shard", "auto_wrap"],
-            fsdp_transformer_layer_cls_to_wrap='LlamaDecoderLayer',
 
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
