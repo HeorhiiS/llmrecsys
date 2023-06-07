@@ -1,18 +1,11 @@
 import os
 import sys
 from typing import List
-
-import fire
 import torch
 import transformers
+import fire
 from datasets import load_dataset
 import wandb
-"""
-Unused imports:
-import torch.nn as nn
-import bitsandbytes as bnb
-"""
-
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -21,17 +14,7 @@ from peft import (
     set_peft_model_state_dict,
 )
 from transformers import LlamaForCausalLM, LlamaTokenizer, Trainer
-
 from utils.prompter import Prompter
-
-from dataclasses import dataclass, field
-from typing import Dict, Optional, Sequence
-
-import torch
-import transformers
-import utils
-from torch.utils.data import Dataset
-from transformers import Trainer
 
 def train(
     base_model: str = "hfcheckpoints/7B/",  # the only required argument
