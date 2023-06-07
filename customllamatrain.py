@@ -35,9 +35,10 @@ from transformers import Trainer
 
 def train(
     base_model: str = "hfcheckpoints/7B/",  # the only required argument
-    train_data_path: str = "yahma/alpaca-cleaned",
-    val_data_path: str = "yahma/alpaca-cleaned",
-    output_dir: str = "/alpaca_lora/finetuned_models/",
+    train_data_path: str = "/litllama/finetune_dataset/llama_train_red.json",
+    val_data_path: str = "/litllama/finetune_dataset/llama_eval_red.json",
+    output_dir: str = "",
+    dataset_whole_path: str = "/litllama/finetune_dataset/llama_train_red_wh.json",
 
 
 
@@ -58,6 +59,7 @@ def train(
     learning_rate = 3e-4
     seq_len = 256
     param_space_size = "7B"
+    val_set_size = 2000
 
     # LoRA hyperparams
     lora_r = 8,
@@ -151,34 +153,60 @@ def train(
     )
     model = get_peft_model(model, config)
 
-    if train_data_path.endswith(".json") or train_data_path.endswith(".jsonl"):
-        train_data = load_dataset("json", data_files=train_data_path)
-        eval_data = load_dataset("json", data_files=val_data_path)
+    if dataset_whole_path is not None:
+        data = load_dataset("json", data_files=dataset_whole_path)
+        if val_set_size > 0:
+            train_val = data["train"].train_test_split(
+                test_size=val_set_size, shuffle=True, seed=42
+            )
+            train_data = (
+                train_val["train"].shuffle().map(generate_and_tokenize_prompt)
+            )
+            val_data = (
+                train_val["test"].shuffle().map(generate_and_tokenize_prompt)
+            )
+        else:
+            train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
+            val_data = None
     else:
-        train_data = load_dataset(data_files=train_data_path)
-        eval_data = load_dataset(data_files=val_data_path)
+        if train_data_path.endswith(".json") or train_data_path.endswith(".jsonl"):
+            train_data = load_dataset("json", data_files=train_data_path)
+            eval_data = load_dataset("json", data_files=val_data_path)
+        else:
+            train_data = load_dataset(data_files=train_data_path)
+            eval_data = load_dataset(data_files=val_data_path)
 
-    if val_set_size > 0:
-        train_val = data["train"].train_test_split(
-            test_size=val_set_size, shuffle=True, seed=42
-        )
-        train_data = (
-            train_val["train"].shuffle().map(generate_and_tokenize_prompt)
-        )
-        val_data = (
-            train_val["test"].shuffle().map(generate_and_tokenize_prompt)
-        )
-    else:
-        train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
-        val_data = None
+        if eval_data is not None:
+            train_data = (
+                train_data["train"].shuffle().map(generate_and_tokenize_prompt)
+            )
+            eval_data = (
+                eval_data["train"].shuffle().map(generate_and_tokenize_prompt)
+            )
+        else:
+            train_data = train_data["train"].shuffle().map(generate_and_tokenize_prompt)
+            val_data = None
 
 
-    BASE_MODEL = checkpoint_path
+
+
+
+
+
+    model.config.use_cache = False
+    old_state_dict = model.state_dict
+    model.state_dict = (
+        lambda self, *_, **__: get_peft_model_state_dict(
+            self, old_state_dict()
+        )
+    ).__get__(model, type(model))
+    if torch.__version__ >= "2" and sys.platform != "win32":
+        model = torch.compile(model)
+
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+
 
     model.save_pretrained(output_dir)
-
-    trainer.save_state()
-    trainer.save_model(output_dir=training_args.output_dir)
 
 if __name__ == "__main__":
     fire.Fire(train)
