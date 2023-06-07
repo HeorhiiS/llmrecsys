@@ -20,7 +20,7 @@ from peft import (
     prepare_model_for_int8_training,
     set_peft_model_state_dict,
 )
-from transformers import LlamaForCausalLM, LlamaTokenizer
+from transformers import LlamaForCausalLM, LlamaTokenizer, Trainer
 
 from utils.prompter import Prompter
 
@@ -39,27 +39,24 @@ def train(
     val_data_path: str = "/litllama/finetune_dataset/llama_eval_red.json",
     output_dir: str = "",
     dataset_whole_path: str = "/litllama/finetune_dataset/llama_train_red_wh.json",
-
-
-
-
-
-
-
-
-
+    train_on_inputs: bool = True,  # if False, masks out inputs in loss
+    group_by_length: bool = False,
+    use_wandb: bool = True,
+    add_eos_token: bool = True,
 
 ):
-    # Load model and tokenizer
-    model = LlamaForCausalLM.from_pretrained()
-    tokenizer = LlamaTokenizer.from_pretrained(base_model)
-    batch_size = 128
+    devices = 8
+    # training hyperparams
+    batch_size = 128 // devices
     micro_batch_size = 4
     num_epochs = 3
     learning_rate = 3e-4
     seq_len = 256
     param_space_size = "7B"
     val_set_size = 2000
+    epoch_size =16000
+    prompt_template_name = "alpaca"
+    gradient_accumulation_steps = batch_size // micro_batch_size
 
     # LoRA hyperparams
     lora_r = 8,
@@ -69,6 +66,22 @@ def train(
         "q_proj",
         "v_proj",
     ]
+
+    # Load model and tokenizer
+    device_map = "auto"  # because we want to use sharding via fsdp or deepspeed
+    prompter = Prompter(prompt_template_name)
+
+    model = LlamaForCausalLM.from_pretrained(
+        base_model,
+        load_in_8bit=False,
+        torch_dtype=torch.float16,
+        device_map=device_map,
+    )
+    tokenizer = LlamaTokenizer.from_pretrained(base_model)
+    tokenizer.pad_token_id = (
+        0
+    )
+    tokenizer.padding_side = 'left'
 
     def tokenize(prompt, add_eos_token=True):
         # there's probably a way to do this with the tokenizer settings
@@ -82,7 +95,7 @@ def train(
         )
         if (
             result["input_ids"][-1] != tokenizer.eos_token_id
-            and len(result["input_ids"]) < cutoff_len
+            and len(result["input_ids"]) < seq_len
             and add_eos_token
         ):
             result["input_ids"].append(tokenizer.eos_token_id)
@@ -118,31 +131,18 @@ def train(
             ]  # could be sped up, probably
         return tokenized_full_prompt
 
-
+    # add wandb logging
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         os.makedirs(output_dir, exist_ok=True)
         wandb.init(
 
             project="llmrecsys",
 
-            name=f"experiment-adapterv2-{param_space_size}",
+            name=f"experiment-lora-{param_space_size}",
+        )
+    wandb_run_name = f"experiment-lora-{param_space_size}"
 
-            config={
-                "learning_rate": learning_rate,
-                "architecture": f"lit-llama{param_space_size}",
-                "dataset": "custom-movielens",
-                "max iterations": max_iters,
-            })
-
-    device_map = "auto"  # because we want to use sharding via fsdp or deepspeed
-
-    model = LlamaForCausalLM.from_pretrained(
-        base_model,
-        load_in_8bit=True,
-        torch_dtype=torch.float16,
-        device_map=device_map,
-    )
-
+    # add LoRA config
     config = LoraConfig(
         r=lora_r,
         lora_alpha=lora_alpha,
@@ -162,12 +162,12 @@ def train(
             train_data = (
                 train_val["train"].shuffle().map(generate_and_tokenize_prompt)
             )
-            val_data = (
+            eval_data = (
                 train_val["test"].shuffle().map(generate_and_tokenize_prompt)
             )
         else:
             train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
-            val_data = None
+            eval_data = None
     else:
         if train_data_path.endswith(".json") or train_data_path.endswith(".jsonl"):
             train_data = load_dataset("json", data_files=train_data_path)
@@ -185,12 +185,40 @@ def train(
             )
         else:
             train_data = train_data["train"].shuffle().map(generate_and_tokenize_prompt)
-            val_data = None
+            eval_data = None
 
 
+    trainer = transformers.Trainer(
+        model=model,
+        train_dataset=train_data,
+        eval_dataset=eval_data,
+        args=transformers.TrainingArguments(
+            per_device_train_batch_size=micro_batch_size,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            warmup_steps=epoch_size * 2 // micro_batch_size // devices,
+            num_train_epochs=num_epochs,
+            learning_rate=learning_rate,
+            fp16=True,
+            logging_steps=100,
+            optim="adamw_torch",
+            evaluation_strategy="steps" if val_set_size > 0 else "no",
+            save_strategy="steps",
+            eval_steps=1000 if val_set_size > 0 else None,
+            save_steps=1000,
+            output_dir=output_dir,
+            save_total_limit=5,
+            load_best_model_at_end=True if val_set_size > 0 else False,
+            # ddp_find_unused_parameters=False if ddp else None,
+            group_by_length=group_by_length,
+            report_to="wandb" if use_wandb else None,
+            fsdp=["full_shard", "auto_wrap"],
+            fsdp_transformer_layer_cls_to_wrap='LlamaDecoderLayer',
 
-
-
+        ),
+        data_collator=transformers.DataCollatorForSeq2Seq(
+            tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
+        ),
+    )
 
 
     model.config.use_cache = False
@@ -203,8 +231,7 @@ def train(
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
 
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
-
+    trainer.train()
 
     model.save_pretrained(output_dir)
 
