@@ -18,10 +18,10 @@ from utils.prompter import Prompter
 
 
 def train(
-    base_model: str = "../hfcheckpoints/13B/",  # the only required argument
+    base_model: str = "../hfcheckpoints/30B/",  # the only required argument
     train_data_path: str = "../litllamadata/finetune_dataset/llama_train_red.json",
     val_data_path: str = "../litllamadata/finetune_dataset/llama_eval_red.json",
-    output_dir: str = "finetuned_models/13B/",
+    output_dir: str = "finetuned_models/30B/",
     dataset_whole_path: str = None,
     train_on_inputs: bool = True,  # if False, masks out inputs in loss
     group_by_length: bool = False,
@@ -33,10 +33,10 @@ def train(
     # training hyperparams
     batch_size = 128
     micro_batch_size = 4
-    num_epochs = 3
+    num_epochs = 10
     learning_rate = 3e-4
     seq_len = 256
-    param_space_size = "13B"
+    param_space_size = "30B"
     val_set_size = 2000
     epoch_size =16000
     prompt_template_name = "alpaca"
@@ -68,8 +68,6 @@ def train(
     tokenizer.padding_side = 'left'
 
     def tokenize(prompt, add_eos_token=True):
-        # there's probably a way to do this with the tokenizer settings
-        # but again, gotta move fast
         result = tokenizer(
             prompt,
             truncation=True,
