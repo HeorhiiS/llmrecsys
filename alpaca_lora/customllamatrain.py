@@ -65,7 +65,7 @@ def train(
     tokenizer.pad_token_id = (
         0
     )
-    tokenizer.padding_side = 'left'
+    tokenizer.padding_side = 'right'
 
     def tokenize(prompt, add_eos_token=True):
         result = tokenizer(

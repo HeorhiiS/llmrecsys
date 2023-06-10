@@ -16,7 +16,7 @@ from peft import (
 
 def train(
 
-    base_model: str = "models--EleutherAI--gpt-j-6B",
+    base_model: str = "EleutherAI/gpt-j-6B",
     output_dir: str = "finetuned_models/GPTJ/",
     train_data_path: str = "../litllamadata/finetune_dataset/llama_train_red.json",
     val_data_path: str = "../litllamadata/finetune_dataset/llama_eval_red.json",
@@ -41,8 +41,16 @@ def train(
     eot_token = "<|endoftext|>"
     param_space_size = "GPTJ"
 
-    model = AutoModelForCausalLM.from_pretrained(base_model)
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    device_map = "auto"  # because we want to use sharding via fsdp or deepspeed
+
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model,
+        cache_dir="GPTJ_weights/",
+        load_in_8bit=False,
+        torch_dtype=torch.float16,
+        device_map=device_map,
+        )
+    tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir="GPTJ_weights/")
 
     # LoRA hyperparams
     lora_r = 8
@@ -53,6 +61,11 @@ def train(
         "v_proj",
     ]
     device_map = "auto"
+
+    tokenizer.pad_token_id = (
+        0  # unk. we want this to be different from the eos token
+    )
+    tokenizer.padding_side = "right"  # Allow batched inference
 
     def tokenize(prompt, add_eos_token=True):
         result = tokenizer(
