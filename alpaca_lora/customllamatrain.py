@@ -18,10 +18,10 @@ from utils.prompter import Prompter
 
 
 def train(
-    base_model: str = "../hfcheckpoints/30B/",  # the only required argument
+    base_model: str = "../hfcheckpoints/65B/",  # the only required argument
     train_data_path: str = "../litllamadata/finetune_dataset/llama_train_red.json",
     val_data_path: str = "../litllamadata/finetune_dataset/llama_eval_red.json",
-    output_dir: str = "finetuned_models/30B/",
+    output_dir: str = "finetuned_models/65B/",
     dataset_whole_path: str = None,
     train_on_inputs: bool = True,  # if False, masks out inputs in loss
     group_by_length: bool = False,
@@ -32,11 +32,11 @@ def train(
     devices = 4
     # training hyperparams
     batch_size = 128
-    micro_batch_size = 4
+    micro_batch_size = 2
     num_epochs = 10
     learning_rate = 3e-4
     seq_len = 256
-    param_space_size = "30B"
+    param_space_size = "65B"
     val_set_size = 2000
     epoch_size =16000
     prompt_template_name = "alpaca"
@@ -119,10 +119,8 @@ def train(
         wandb.init(
 
             project="llmrecsys",
-
             name=f"experiment-lora-{param_space_size}",
         )
-    wandb_run_name = f"experiment-lora-{param_space_size}"
 
     # add LoRA config
     config = LoraConfig(
@@ -176,8 +174,9 @@ def train(
         eval_dataset=eval_data,
         args=transformers.TrainingArguments(
             per_device_train_batch_size=micro_batch_size,
+            per_device_eval_batch_size=micro_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            warmup_steps=epoch_size * 2 // micro_batch_size // devices,
+            warmup_steps=epoch_size * 2 // micro_batch_size-2 // devices,
             num_train_epochs=num_epochs,
             learning_rate=learning_rate,
             fp16=True,
