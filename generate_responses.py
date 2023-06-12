@@ -77,7 +77,7 @@ def generate(
     eval_data = load_dataset("json", data_files="../litllamadata/finetune_dataset/llama_eval_red.json")
 
     precision_scores = []
-    progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='green', ascii="░▒█")
+    progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='magenta', ascii="░▒█")
 
     for prompt in eval_data['train']:
         instruction = prompt['instruction']
