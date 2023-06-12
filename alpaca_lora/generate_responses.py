@@ -80,71 +80,139 @@ def generate(
     progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='magenta', ascii="░▒█")
     batched_prompt = []
     batched_og_output = []
-    counter = 0
+
+    batch_count = 0
+    global_counter = 0
+    num_batches = (len(eval_data['train']) // batch_size) * batch_size
+    remainder = len(eval_data['train']) % batch_size
     movie_df = pd.read_json('../movie_map.json')
     all_titles = movie_df['title']
     all_titles = np.array(all_titles)
 
     for prompt in eval_data['train']:
 
-        instruction = prompt['instruction']
-        input = prompt['input']
-        og_output = prompt['output']
+        condition1 = batch_count % batch_size == 0
+        condition2 = num_batches == global_counter
 
-        prompt = f'### Instruction: {instruction}\n ### Input: ' + f"{input}\n ### Output:"
-        batched_prompt.append(prompt)
-        batched_og_output.append(og_output)
-        counter += 1
-        if counter % batch_size == 0:
+        if not condition2:
 
-            input_ids = tokenizer(batched_prompt, return_tensors="pt").input_ids
-            input_ids = input_ids.to('cuda')
+            instruction = prompt['instruction']
+            input = prompt['input']
+            og_output = prompt['output']
 
-            with torch.no_grad():
-                generation_output = model.generate(
-                    input_ids=input_ids,
-                    repetition_penalty=2.0,
-                    max_new_tokens=128,
-                    temperature=1,
-                    top_p=1,
-                    top_k=50,
-                    num_beams=20,
-                    do_sample=True,
-                    eos_token_id=model.config.eos_token_id,
+            prompt = f'### Instruction: {instruction}\n ### Input: ' + f"{input}\n ### Output:"
+            batched_prompt.append(prompt)
+            batched_og_output.append(og_output)
+            batch_count += 1
 
-                )
-                output = tokenizer.batch_decode(generation_output[0])
+            if condition1:
 
-                for output_elem in output:
+                input_ids = tokenizer(batched_prompt, return_tensors="pt").input_ids
+                input_ids = input_ids.to('cuda')
 
-                    parsed = output_elem.split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
+                with torch.no_grad():
+                    generation_output = model.generate(
+                        input_ids=input_ids,
+                        repetition_penalty=2.0,
+                        max_new_tokens=128,
+                        temperature=1,
+                        top_p=1,
+                        top_k=50,
+                        num_beams=20,
+                        do_sample=True,
+                        eos_token_id=model.config.eos_token_id,
 
-                    parsed_og_output = og_output.strip().split(", ")
+                    )
+                    output = tokenizer.batch_decode(generation_output[0])
 
-                    fixed_output = []
-                    for parsed_title in parsed:
-                        fixed_title = find_closest_string(parsed_title, all_titles)
-                        fixed_output.append(fixed_title)
+                    for i in range(len(output)):
 
-                    for row in movie_df.iterrows():
-                        title = row[1]['title']
-                        mapping = row[1]['movie_id']
+                        parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
 
-                        if title in fixed_output:
-                            fixed_output[fixed_output.index(title)] = mapping
-                        if title in parsed_og_output:
-                            parsed_og_output[parsed_og_output.index(title)] = mapping
+                        parsed_og_output = batched_og_output[i].strip().split(", ")
 
-                    set_preds = set(fixed_output)
-                    set_test = set(parsed_og_output)
+                        fixed_output = []
+                        for parsed_title in parsed:
+                            fixed_title = find_closest_string(parsed_title, all_titles)
+                            fixed_output.append(fixed_title)
 
-                    common_elements = set_preds.intersection(set_test)
-                    precision = len(common_elements) / len(set_preds)
+                        for row in movie_df.iterrows():
+                            title = row[1]['title']
+                            mapping = row[1]['movie_id']
 
-                    precision_scores.append(precision)
-                    counter = 0
-                    batched_prompt = []
-                    progress_bar.update(1)
+                            if title in fixed_output:
+                                fixed_output[fixed_output.index(title)] = mapping
+                            if title in parsed_og_output:
+                                parsed_og_output[parsed_og_output.index(title)] = mapping
+
+                        set_preds = set(fixed_output)
+                        set_test = set(parsed_og_output)
+
+                        common_elements = set_preds.intersection(set_test)
+                        precision = len(common_elements) / len(set_preds)
+
+                        precision_scores.append(precision)
+                        progress_bar.update(1)
+                batched_prompt = []
+                batch_count = 0
+
+            else:
+                instruction = prompt['instruction']
+                input = prompt['input']
+                og_output = prompt['output']
+
+                prompt = f'### Instruction: {instruction}\n ### Input: ' + f"{input}\n ### Output:"
+                batched_prompt.append(prompt)
+                batched_og_output.append(og_output)
+
+                input_ids = tokenizer(batched_prompt, return_tensors="pt").input_ids
+                input_ids = input_ids.to('cuda')
+
+                with torch.no_grad():
+                    generation_output = model.generate(
+                        input_ids=input_ids,
+                        repetition_penalty=2.0,
+                        max_new_tokens=128,
+                        temperature=1,
+                        top_p=1,
+                        top_k=50,
+                        num_beams=20,
+                        do_sample=True,
+                        eos_token_id=model.config.eos_token_id,
+
+                    )
+                    output = tokenizer.batch_decode(generation_output[0])
+
+                    for i in range(len(output)):
+
+                        parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
+
+                        parsed_og_output = batched_og_output[i].strip().split(", ")
+
+                        fixed_output = []
+                        for parsed_title in parsed:
+                            fixed_title = find_closest_string(parsed_title, all_titles)
+                            fixed_output.append(fixed_title)
+
+                        for row in movie_df.iterrows():
+                            title = row[1]['title']
+                            mapping = row[1]['movie_id']
+
+                            if title in fixed_output:
+                                fixed_output[fixed_output.index(title)] = mapping
+                            if title in parsed_og_output:
+                                parsed_og_output[parsed_og_output.index(title)] = mapping
+
+                        set_preds = set(fixed_output)
+                        set_test = set(parsed_og_output)
+
+                        common_elements = set_preds.intersection(set_test)
+                        precision = len(common_elements) / len(set_preds)
+
+                        precision_scores.append(precision)
+                        progress_bar.update(1)
+
+        global_counter += 1
 
     # mean average precision
     print(f'Mean Average Precision for {model_type}: {np.mean(precision_scores)}')
