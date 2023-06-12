@@ -22,6 +22,8 @@ def generate(
     # Load the model
     device_map = "auto" if torch.cuda.is_available() else "cpu"
 
+    print(f"Is CUDA available? => {torch.cuda.is_available()}")
+
     base_model = "../hfcheckpoints/7B/"
     lora_weights = "finetuned_models/7B/"
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
@@ -71,10 +73,10 @@ def generate(
     model.config.bos_token_id = 1
     model.config.eos_token_id = 2
 
+    model.eval()
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
 
-    model.eval()
     eval_data = load_dataset("json", data_files="../litllamadata/finetune_dataset/llama_eval_red.json")
     precision_scores = []
     progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='magenta', ascii="░▒█")
@@ -211,6 +213,7 @@ def generate(
 
                         precision_scores.append(precision)
                         progress_bar.update(1)
+                batched_prompt = []
 
         global_counter += 1
 
