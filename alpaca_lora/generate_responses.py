@@ -1,6 +1,7 @@
 import sys
 import fire
 import torch
+import Levenshtein as leven
 from peft import PeftModel
 from transformers import GenerationConfig, LlamaForCausalLM, LlamaTokenizer
 if torch.cuda.is_available():
@@ -49,24 +50,17 @@ def generate(
             device_map=device_map,
         )
 
-    def find_closest_string(original_string, string_list):
-        max_common_chars = 0
-        closest_string = None
+    def find_most_similar_string(query, string_list):
+        most_similar_string = None
+        highest_similarity = 0
 
         for string in string_list:
-            common_chars = 0
-            temp_string = string
+            similarity = leven.distance(query, string)
+            if most_similar_string is None or similarity < highest_similarity:
+                most_similar_string = string
+                highest_similarity = similarity
 
-            for char in original_string:
-                if char in temp_string:
-                    common_chars += 1
-                    temp_string = temp_string.replace(char, '', 1)
-
-            if common_chars > max_common_chars:
-                max_common_chars = common_chars
-                closest_string = string
-
-        return closest_string
+        return most_similar_string
 
     # unwind broken decapoda-research config
     model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
@@ -79,7 +73,6 @@ def generate(
 
     eval_data = load_dataset("json", data_files="../litllamadata/finetune_dataset/llama_eval_red.json")
     precision_scores = []
-    progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='magenta', ascii="░▒█")
     batched_prompt = []
     batched_og_output = []
 
@@ -91,14 +84,13 @@ def generate(
     all_titles = movie_df['title']
     all_titles = np.array(all_titles)
 
-    print(num_batches, remainder)
-    print("Hello")
+    progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='magenta', ascii="░▒█")
 
     for prompt in eval_data['train']:
 
-        condition1 = batch_count % batch_size == 0
+        condition1 = (batch_count !=0) and batch_count % batch_size == 0
         condition2 = num_batches == global_counter
-        print(condition1, condition2)
+
         if not condition2:
 
             instruction = prompt['instruction']
@@ -111,7 +103,7 @@ def generate(
             batch_count += 1
 
             if condition1:
-                input_ids = tokenizer(batched_prompt, return_tensors="pt").input_ids
+                input_ids = tokenizer(batched_prompt, padding=True, return_tensors="pt").input_ids
                 input_ids = input_ids.to('cuda')
                 with torch.no_grad():
                     generation_output = model.generate(
@@ -131,7 +123,6 @@ def generate(
 
 
                     for i in range(len(output)):
-                        print(i)
                         parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
                         parsed_og_output = batched_og_output[i].strip().split(", ")
 
@@ -169,7 +160,7 @@ def generate(
             batched_prompt.append(prompt)
             batched_og_output.append(og_output)
 
-            input_ids = tokenizer(batched_prompt, return_tensors="pt").input_ids
+            input_ids = tokenizer(batched_prompt, padding=True, return_tensors="pt").input_ids
             input_ids = input_ids.to('cuda')
 
             with torch.no_grad():
