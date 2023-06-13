@@ -27,7 +27,7 @@ import tqdm
 
 def generate(
         model_type: str = "LLAMA-7B",
-        batch_size: int = 4,
+        batch_size: int = 10,
 ):
 
     # Load the model
@@ -97,7 +97,7 @@ def generate(
     all_titles = np.array(all_titles)
 
 
-    outfile = "generated_7Bt.json"
+    outfile = "generated_7B.json"
 
     model.config.use_cache = False
     old_state_dict = model.state_dict
@@ -179,7 +179,7 @@ def generate(
                         precision = len(common_elements) / len(set_preds)
 
                         precision_scores.append(precision)
-                        progress_bar.update(1)
+                progress_bar.update(batch_size)
                 batched_prompt = []
                 batch_count = 0
 
@@ -204,16 +204,11 @@ def generate(
                     # top_p=0.7,
                     #top_k=10,
                     num_beams=5,
-                    do_sample=True,
+                    do_sample=False,
                     eos_token_id=model.config.eos_token_id,
 
                 )
                 output = tokenizer.batch_decode(generation_output)
-
-                print(output)
-                print(batched_og_output)
-
-                sys.stdout.flush()
 
                 for i in range(len(output)):
 
@@ -248,23 +243,23 @@ def generate(
                     set_preds = set(fixed_output)
                     set_test = set(parsed_og_output)
 
-                    print(f"set_preds: {set_preds} \n set_test: {set_test}")
+                    # print(f"set_preds: {set_preds} \n set_test: {set_test}")
 
                     common_elements = set_preds.intersection(set_test)
 
-                    print(f"common_elements: {common_elements}")
+                    # print(f"common_elements: {common_elements}")
                     precision = len(common_elements) / len(set_preds)
 
 
-                    print(f"precision: {precision}")
-                    sys.stdout.flush()
+                    # print(f"precision: {precision}")
+                    # sys.stdout.flush()
 
                     precision_scores.append(precision)
                     progress_bar.update(1)
             batched_prompt = []
             batched_og_output = []
-            print(precision_scores)
-            sys.stdout.flush()
+        print(global_counter)
+        sys.stdout.flush()
 
         global_counter += 1
 
