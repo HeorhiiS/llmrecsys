@@ -1,14 +1,24 @@
+import json
 import sys
 import fire
 import torch
 import Levenshtein as leven
+import transformers
 from peft import PeftModel
-from transformers import GenerationConfig, LlamaForCausalLM, LlamaTokenizer
+from transformers import GenerationConfig, LlamaForCausalLM, LlamaTokenizer, logging
 if torch.cuda.is_available():
     device = "cuda"
 else:
     device = "cpu"
 from datasets import load_dataset
+
+from peft import (
+    LoraConfig,
+    get_peft_model,
+    get_peft_model_state_dict,
+    prepare_model_for_int8_training,
+    set_peft_model_state_dict,
+)
 
 import pandas as pd
 import numpy as np
@@ -17,11 +27,12 @@ import tqdm
 
 def generate(
         model_type: str = "LLAMA-7B",
-        batch_size: int = 10,
+        batch_size: int = 4,
 ):
 
     # Load the model
-    device_map = "auto" if torch.cuda.is_available() else "cpu"
+    device_map = "balanced_low_0" if torch.cuda.is_available() else "cpu"
+    logging.set_verbosity_error()
 
     print(f"Is CUDA available? => {torch.cuda.is_available()}")
 
@@ -33,7 +44,7 @@ def generate(
             base_model,
             load_in_8bit=False,
             torch_dtype=torch.float16,
-            device_map="auto",
+            device_map="balanced_low_0",
         )
         model = PeftModel.from_pretrained(
             model,
@@ -50,7 +61,8 @@ def generate(
             device_map=device_map,
         )
 
-    def find_most_similar_string(query, string_list):
+    # Load the tokenizer
+    def find_closest_string(query, string_list):
         most_similar_string = None
         highest_similarity = 0
 
@@ -66,7 +78,7 @@ def generate(
     model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
     model.config.bos_token_id = 1
     model.config.eos_token_id = 2
-
+    model.half()
     model.eval()
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
@@ -84,6 +96,18 @@ def generate(
     all_titles = movie_df['title']
     all_titles = np.array(all_titles)
 
+
+    outfile = "generated_7B.json"
+
+    model.config.use_cache = False
+    old_state_dict = model.state_dict
+    model.state_dict = (
+        lambda self, *_, **__: get_peft_model_state_dict(
+            self, old_state_dict()
+        )
+    ).__get__(model, type(model))
+
+
     progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='magenta', ascii="░▒█")
 
     for prompt in eval_data['train']:
@@ -93,6 +117,8 @@ def generate(
 
         if not condition2:
 
+            # print(prompt)
+            # sys.stdout.flush()
             instruction = prompt['instruction']
             input = prompt['input']
             og_output = prompt['output']
@@ -109,12 +135,12 @@ def generate(
                     generation_output = model.generate(
                         input_ids=input_ids,
                         repetition_penalty=2.0,
-                        max_new_tokens=128,
+                        max_new_tokens=100,
                         temperature=1,
                         top_p=1,
                         top_k=50,
-                        num_beams=20,
-                        do_sample=True,
+                        num_beams=1,
+                        do_sample=False,
                         eos_token_id=model.config.eos_token_id,
 
                     )
@@ -125,6 +151,12 @@ def generate(
                     for i in range(len(output)):
                         parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
                         parsed_og_output = batched_og_output[i].strip().split(", ")
+
+                        json_prompt = {"test": parsed_og_output, "predicted": parsed}
+
+                        with open(outfile, 'a') as json_file:
+                            json.dump(json_prompt, json_file)
+                            json_file.write('\n')
 
                         fixed_output = []
                         for parsed_title in parsed:
@@ -171,18 +203,27 @@ def generate(
                     temperature=1,
                     top_p=1,
                     top_k=50,
-                    num_beams=20,
-                    do_sample=True,
+                    num_beams=1,
+                    do_sample=False,
                     eos_token_id=model.config.eos_token_id,
 
                 )
-                output = tokenizer.batch_decode(generation_output[0])
+                output = tokenizer.batch_decode(generation_output)
+
+                print(output)
+                sys.stdout.flush()
 
                 for i in range(len(output)):
 
                     parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
 
                     parsed_og_output = batched_og_output[i].strip().split(", ")
+
+                    json_prompt = {"test": parsed_og_output, "predicted": parsed}
+
+                    with open(outfile, 'a') as json_file:
+                        json.dump(json_prompt, json_file)
+                        json_file.write('\n')
 
                     fixed_output = []
                     for parsed_title in parsed:
