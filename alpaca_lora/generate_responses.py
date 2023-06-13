@@ -114,7 +114,6 @@ def generate(
 
         condition1 = (batch_count !=0) and batch_count % batch_size == 0
         condition2 = num_batches == global_counter
-        condition2 = True
 
         if not condition2:
 
@@ -137,10 +136,10 @@ def generate(
                         input_ids=input_ids,
                         repetition_penalty=2.0,
                         max_new_tokens=100,
-                        temperature=1,
-                        top_p=1,
-                        top_k=50,
-                        num_beams=1,
+                        # temperature=1,
+                        # top_p=1,
+                        # top_k=50,
+                        num_beams=5,
                         do_sample=False,
                         eos_token_id=model.config.eos_token_id,
 
@@ -200,12 +199,12 @@ def generate(
                 generation_output = model.generate(
                     input_ids=input_ids,
                     repetition_penalty=2.0,
-                    max_new_tokens=128,
-                    temperature=0.00001,
-                    top_p=1,
-                    top_k=90,
-                    num_beams=1,
-                    do_sample=False,
+                    max_new_tokens=100,
+                    # temperature=0.1,
+                    # top_p=0.7,
+                    #top_k=10,
+                    num_beams=5,
+                    do_sample=True,
                     eos_token_id=model.config.eos_token_id,
 
                 )
