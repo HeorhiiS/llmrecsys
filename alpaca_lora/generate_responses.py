@@ -203,8 +203,8 @@ def generate(
                     max_new_tokens=128,
                     temperature=0.00001,
                     top_p=1,
-                    top_k=50,
-                    num_beams=2,
+                    top_k=90,
+                    num_beams=1,
                     do_sample=False,
                     eos_token_id=model.config.eos_token_id,
 
@@ -232,6 +232,10 @@ def generate(
                     for parsed_title in parsed:
                         fixed_title = find_closest_string(parsed_title, all_titles)
                         fixed_output.append(fixed_title)
+
+                    for og_title in parsed_og_output:
+                        fixed_title = find_closest_string(og_title, all_titles)
+                        parsed_og_output[parsed_og_output.index(og_title)] = fixed_title
 
                     for row in movie_df.iterrows():
                         title = row[1]['title']
