@@ -26,25 +26,26 @@ import tqdm
 
 
 def generate(
-        model_type: str = "LLAMA-7B",
+        model_type: str = "LLAMA-30B",
         batch_size: int = 10,
+        num_samples: int = 500,
 ):
 
     # Load the model
-    device_map = "balanced_low_0" if torch.cuda.is_available() else "cpu"
+    device_map = "auto" if torch.cuda.is_available() else "cpu"
     logging.set_verbosity_error()
 
     print(f"Is CUDA available? => {torch.cuda.is_available()}")
 
-    base_model = "../hfcheckpoints/7B/"
-    lora_weights = "finetuned_models/7B/"
+    base_model = "../hfcheckpoints/30B/"
+    lora_weights = "finetuned_models/30B/"
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
     if device == "cuda":
         model = LlamaForCausalLM.from_pretrained(
             base_model,
             load_in_8bit=False,
             torch_dtype=torch.float16,
-            device_map="balanced_low_0",
+            device_map="auto",
         )
         model = PeftModel.from_pretrained(
             model,
@@ -97,7 +98,7 @@ def generate(
     all_titles = np.array(all_titles)
 
 
-    outfile = "generated_7B.json"
+    outfile = "generated_30B.json"
 
     model.config.use_cache = False
     old_state_dict = model.state_dict
@@ -107,13 +108,14 @@ def generate(
         )
     ).__get__(model, type(model))
 
+    eval_set_reduced = list(eval_data['train'])[:num_samples]
+    progress_bar = tqdm.tqdm(total=len(eval_set_reduced), ncols=100, colour='magenta', ascii="░▒█")
 
-    progress_bar = tqdm.tqdm(total=len(eval_data['train']), ncols=100, colour='magenta', ascii="░▒█")
-
-    for prompt in eval_data['train']:
+    for prompt in eval_set_reduced:
 
         condition1 = (batch_count !=0) and batch_count % batch_size == 0
         condition2 = num_batches == global_counter
+        condition2 = True
 
         if not condition2:
 
@@ -139,7 +141,7 @@ def generate(
                         # temperature=1,
                         # top_p=1,
                         # top_k=50,
-                        num_beams=5,
+                        num_beams=2,
                         do_sample=False,
                         eos_token_id=model.config.eos_token_id,
 
@@ -182,6 +184,9 @@ def generate(
                 progress_bar.update(batch_size)
                 batched_prompt = []
                 batch_count = 0
+            else:
+                global_counter += 1
+                continue
 
         else:
             instruction = prompt['instruction']
@@ -203,7 +208,7 @@ def generate(
                     # temperature=0.1,
                     # top_p=0.7,
                     #top_k=10,
-                    num_beams=5,
+                    num_beams=2,
                     do_sample=False,
                     eos_token_id=model.config.eos_token_id,
 
@@ -212,10 +217,12 @@ def generate(
 
                 for i in range(len(output)):
 
+                    print(output[i])
                     parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
-
+                    print(parsed)
                     parsed_og_output = batched_og_output[i].strip().split("), ")
 
+                    sys.stdout.flush()
                     json_prompt = {"test": parsed_og_output, "predicted": parsed}
 
                     with open(outfile, 'a') as json_file:
@@ -243,24 +250,17 @@ def generate(
                     set_preds = set(fixed_output)
                     set_test = set(parsed_og_output)
 
-                    # print(f"set_preds: {set_preds} \n set_test: {set_test}")
+                    print(f"set_preds: {set_preds} \n set_test: {set_test}")
 
                     common_elements = set_preds.intersection(set_test)
-
-                    # print(f"common_elements: {common_elements}")
                     precision = len(common_elements) / len(set_preds)
-
-
-                    # print(f"precision: {precision}")
-                    # sys.stdout.flush()
+                    print(f"precision: {precision}")
+                    sys.stdout.flush()
 
                     precision_scores.append(precision)
                     progress_bar.update(1)
             batched_prompt = []
             batched_og_output = []
-        print(global_counter)
-        sys.stdout.flush()
-
         global_counter += 1
 
     # mean average precision
