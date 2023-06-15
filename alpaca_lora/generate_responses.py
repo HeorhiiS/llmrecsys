@@ -26,7 +26,7 @@ import tqdm
 
 
 def generate(
-        model_type: str = "LLAMA-30B",
+        model_type: str = "LLAMA-65B",
         batch_size: int = 10,
         num_samples: int = 500,
 ):
@@ -37,8 +37,8 @@ def generate(
 
     print(f"Is CUDA available? => {torch.cuda.is_available()}")
 
-    base_model = "../hfcheckpoints/30B/"
-    lora_weights = "finetuned_models/30B/"
+    base_model = "../hfcheckpoints/65B/"
+    lora_weights = "finetuned_models/65B/"
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
     if device == "cuda":
         model = LlamaForCausalLM.from_pretrained(
@@ -98,7 +98,7 @@ def generate(
     all_titles = np.array(all_titles)
 
 
-    outfile = "generated_30B.json"
+    outfile = "generated_65B.json"
 
     model.config.use_cache = False
     old_state_dict = model.state_dict
