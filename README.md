@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 #### 2. Download the official LLAMA weights from Meta
 
-Paste the presign URL into the bash script `slurm/download.sh` and run it. This will download the weights and tokenizer to `llamadownloads/`.
+Paste the presign URL into the bash script `slurm/download.sh` and run it. This will download the weights and tokenizer to `llamadownloads/ or your preferred weight directory.
 
 For GPT-J the weight will be loaded and cached automatically.
 
