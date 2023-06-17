@@ -9,13 +9,11 @@
 ### How do I run this myself?
 
 #### 1. Install the requirements
-Recommended: create a virtual environment (I refer conda)
+Recommended: create a virtual environment (I prefer conda)
 ```
 conda create -n llmrec python=3.9
 conda activate llmrec
-```
-Install the requirements
-```
 pip install -r requirements.txt
 ```
 
+#### 2. Download the official LLAMA weights from Meta
