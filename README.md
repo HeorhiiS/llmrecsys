@@ -1,4 +1,4 @@
-# Turning LLMs into recommendation systems
+# Turning LLMs into recommendation systems 🐝
 
 ## What this repository has: 
 
