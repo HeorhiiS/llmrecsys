@@ -84,7 +84,7 @@ def generate(
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
 
-    eval_data = load_dataset("json", data_files="../litllamadata/finetune_dataset/llama_eval_red.json")
+    eval_data = load_dataset("json", data_files="../finetune_dataset/llama_eval_red.json")
     precision_scores = []
     batched_prompt = []
     batched_og_output = []

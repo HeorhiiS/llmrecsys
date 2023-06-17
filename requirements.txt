@@ -158,3 +158,11 @@ wheel==0.38.4
 xxhash==3.2.0
 yarl==1.9.2
 zipp==3.15.0
+accelerate
+appdirs
+loralib
+bitsandbytes
+fire
+git+https://github.com/huggingface/peft.git
+sentencepiece
+gradio
