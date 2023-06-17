@@ -38,7 +38,7 @@ def generate(
     print(f"Is CUDA available? => {torch.cuda.is_available()}")
 
     base_model = "../hfcheckpoints/65B/"
-    lora_weights = "finetuned_models/65B/"
+    lora_weights = "lora_weights/65B/" # are in lora_weigths folder
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
     if device == "cuda":
         model = LlamaForCausalLM.from_pretrained(

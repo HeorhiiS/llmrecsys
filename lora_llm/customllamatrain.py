@@ -19,8 +19,8 @@ from utils.prompter import Prompter
 
 def train(
     base_model: str = "../hfcheckpoints/65B/",  # the only required argument
-    train_data_path: str = "../litllamadata/finetune_dataset/llama_train_red.json",
-    val_data_path: str = "../litllamadata/finetune_dataset/llama_eval_red.json",
+    train_data_path: str = "../finetune_dataset/llama_train_red.json",
+    val_data_path: str = "../finetune_dataset/llama_eval_red.json",
     output_dir: str = "finetuned_models/65B/",
     dataset_whole_path: str = None,
     train_on_inputs: bool = True,  # if False, masks out inputs in loss

@@ -18,8 +18,8 @@ def train(
 
     base_model: str = "EleutherAI/gpt-j-6B",
     output_dir: str = "finetuned_models/GPTJ/",
-    train_data_path: str = "../litllamadata/finetune_dataset/llama_train_red.json",
-    val_data_path: str = "../litllamadata/finetune_dataset/llama_eval_red.json",
+    train_data_path: str = "../finetune_dataset/llama_train_red.json",
+    val_data_path: str = "../finetune_dataset/llama_eval_red.json",
     dataset_whole_path: str = None,
     group_by_length: bool = False,
     train_on_inputs: bool = True,
