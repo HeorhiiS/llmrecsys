@@ -93,12 +93,12 @@ def generate(
     global_counter = 0
     num_batches = (len(eval_data['train']) // batch_size) * batch_size
     remainder = len(eval_data['train']) % batch_size
-    movie_df = pd.read_json('../movie_map.json')
+    movie_df = pd.read_json('../movie_map.json') # load the mapping of movie titles to ids
     all_titles = movie_df['title']
     all_titles = np.array(all_titles)
 
 
-    outfile = "generated_65B.json"
+    outfile = f"generated_{model_type}.json" # modify
 
     model.config.use_cache = False
     old_state_dict = model.state_dict
@@ -119,8 +119,6 @@ def generate(
 
         if not condition2:
 
-            # print(prompt)
-            # sys.stdout.flush()
             instruction = prompt['instruction']
             input = prompt['input']
             og_output = prompt['output']
@@ -217,13 +215,10 @@ def generate(
 
                 for i in range(len(output)):
 
-                    print(output[i])
-                    parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4]
-                    print(parsed)
+                    parsed = output[i].split("Output:")[1].split("</s>")[0].strip().split(", ")[:4] # parse model output 
                     parsed_og_output = batched_og_output[i].strip().split("), ")
 
-                    sys.stdout.flush()
-                    json_prompt = {"test": parsed_og_output, "predicted": parsed}
+                    json_prompt = {"test": parsed_og_output, "predicted": parsed} # record to json, because rerunning the model is expensive
 
                     with open(outfile, 'a') as json_file:
                         json.dump(json_prompt, json_file)
@@ -231,7 +226,7 @@ def generate(
 
                     fixed_output = []
                     for parsed_title in parsed:
-                        fixed_title = find_closest_string(parsed_title, all_titles)
+                        fixed_title = find_closest_string(parsed_title, all_titles) # apply Levenstein distance to fix typos
                         fixed_output.append(fixed_title)
 
                     for og_title in parsed_og_output:
@@ -247,16 +242,10 @@ def generate(
                         if title in parsed_og_output:
                             parsed_og_output[parsed_og_output.index(title)] = mapping
 
-                    set_preds = set(fixed_output)
+                    set_preds = set(fixed_output) # calculate precision
                     set_test = set(parsed_og_output)
-
-                    print(f"set_preds: {set_preds} \n set_test: {set_test}")
-
-                    common_elements = set_preds.intersection(set_test)
+                    common_elements = set_preds.intersection(set_test) # apply union to find common ids regardless of the order
                     precision = len(common_elements) / len(set_preds)
-                    print(f"precision: {precision}")
-                    sys.stdout.flush()
-
                     precision_scores.append(precision)
                     progress_bar.update(1)
             batched_prompt = []
