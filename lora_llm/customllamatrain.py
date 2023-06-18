@@ -36,7 +36,7 @@ def train(
     num_epochs = 10
     learning_rate = 3e-4
     seq_len = 256
-    param_space_size = "65B"
+    param_space_size = "65B" # change this variable to the size of the model
     val_set_size = 2000
     epoch_size =16000
     prompt_template_name = "alpaca"
@@ -133,6 +133,7 @@ def train(
     )
     model = get_peft_model(model, config)
 
+    # Load the dataset
     if dataset_whole_path is not None:
         data = load_dataset("json", data_files=dataset_whole_path)
         if val_set_size > 0:
@@ -158,7 +159,7 @@ def train(
 
         if eval_data is not None:
             train_data = (
-                train_data["train"].shuffle().map(generate_and_tokenize_prompt)
+                train_data["train"].shuffle().map(generate_and_tokenize_prompt) # apply tokenization to the dataset
             )
             eval_data = (
                 eval_data["train"].shuffle().map(generate_and_tokenize_prompt)
@@ -167,7 +168,7 @@ def train(
             train_data = train_data["train"].shuffle().map(generate_and_tokenize_prompt)
             eval_data = None
 
-
+    # Train the model using trainer utility, can be modified to accept ddp and deepspeed
     trainer = transformers.Trainer(
         model=model,
         train_dataset=train_data,
@@ -207,12 +208,12 @@ def train(
             self, old_state_dict()
         )
     ).__get__(model, type(model))
-    if torch.__version__ >= "2" and sys.platform != "win32":
+    if torch.__version__ >= "2" and sys.platform != "win32": # speed up training using JIT
         model = torch.compile(model)
 
     trainer.train()
 
-    model.save_pretrained(output_dir)
+    model.save_pretrained(output_dir) # save the final results
 
 if __name__ == "__main__":
     fire.Fire(train)
