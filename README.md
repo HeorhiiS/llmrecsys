@@ -45,6 +45,6 @@ python lora_llm/customllamatrain.py
 python lora_llm/customllamaeval.py
 ```
 
-For GPT-J, the procedure is the same, but you can skip step 2 and 3. Scrits use wandb for logging, so you need to modifty the scripts if you don't want to use it or provide your own API key and apply `wandb.login()`.
+For GPT-J, the procedure is the same, but you can skip step 2 and 3. Scripts use wandb for logging, so you need to modifty the scripts if you don't want to use it or provide your own API key and apply `wandb.login()`.
 
 You can also play around with prompt and the dataset in the notebook makemydata.ipynb. You will need to download the dataset from [here](https://grouplens.org/datasets/movielens/). The notebook will prepare the data for you for LLAMA. For GPT-J the script will combine instruction and input fields into one field and add endoftext tokens.
