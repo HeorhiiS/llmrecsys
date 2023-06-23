@@ -14,7 +14,7 @@
 
 Recommended: create a virtual environment (I prefer conda)
 
-```bash
+```console
 conda create -n llmrec python=3.9
 conda activate llmrec
 pip install -r requirements.txt
@@ -28,20 +28,20 @@ For GPT-J the weights will be loaded and cached automatically.
 
 #### 3. Apply converstion script to convert the weights to the right format. SLURM version in `slurm/prepdata.sh`
 
-```bash
+```console
 python ../convert_llama_weights_to_hf.py \
     --input_dir ../weights_dir/ --model_size 65B --output_dir ../converted_checkpoints/65B
 ```
 
 #### 4. Run the finetuning script
 
-```bash
+```console
 python lora_llm/customllamatrain.py
 ```
 
 #### 5. Run the evaluation script
 
-```bash
+```console
 python lora_llm/customllamaeval.py
 ```
 
