@@ -14,7 +14,7 @@
 
 Recommended: create a virtual environment (I prefer conda)
 
-```console
+```bat
 conda create -n llmrec python=3.9
 conda activate llmrec
 pip install -r requirements.txt
