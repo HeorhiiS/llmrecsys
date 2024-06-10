@@ -17,7 +17,7 @@
 # Load modules here (safety measure)
 module purge
 source ~/.bashrc
-conda activate llamaenv
+conda activate llamaenv 
 # You may need to load gcc here .. This is application specific
 # module load gcc
 # Replace this with your actual command. 'serial-hello-world' for example
